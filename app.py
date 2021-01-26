@@ -1,13 +1,14 @@
 from flask import Flask, request
 from flask_restful import Resource, Api, reqparse
-from flask_jwt import JWT, jwt_required, current_identity
-from werkzeug.security import safe_str_cmp
-
+from flask_jwt_extended import JWTManager
+from flask_jwt_extended import create_access_token, jwt_required
+from flask_cors import CORS
 
 app = Flask(__name__)
+app.config['JWT_SECRET_KEY'] = 'my_cool_secret'
+jwt = JWTManager(app)
+CORS(app)
 api = Api(app)
-app.config['SECRET_KEY'] = 'super-secret'
-
 
 users = [
     {
@@ -54,44 +55,29 @@ cars = [
 ]
 
 
-class User(object):
-    def __init__(self, id, username, password):
-        self.id = id
-        self.username = username
-        self.password = password
-
-    def __str__(self):
-        return "User(id='%s')" % self.id
-
-
-
-username_table = {u['username']: u for u in users}
-userid_table = {u['id']: u for u in users}
-
-
-def authenticate(username, password):
-    user = username_table.get(username, None)
-    if user and safe_str_cmp(user.password.encode('utf-8'), password.encode('utf-8')):
-        return user
-
-
-def identity(payload):
-    user_id = payload['identity']
-    return userid_table.get(user_id, None)
-
-
-jwt = JWT(app, authenticate, identity)
+class UserLogin(Resource):
+    def post(self):
+        username = request.get_json()['username']
+        password = request.get_json()['password']
+        for user in users:
+            if user['username'] == username and user['password'] == password:
+                access_token = create_access_token(identity={
+                    'role': 'admin',
+                }, expires_delta=False)
+                result = {'token': access_token}
+                return result
+            return {'error': 'Invalid username and password'}, 403
 
 
 class Automobile(Resource):
-    @jwt_required()
+    @jwt_required
     def get(self, mark):
         for car in cars:
             if car['mark'] == mark:
                 return car, 200
         return {"Error": "Auto with that mark not found"}, 404
 
-    @jwt_required()
+    @jwt_required
     def post(self, mark):
         parser = reqparse.RequestParser()
         parser.add_argument('max_speed')
@@ -109,7 +95,7 @@ class Automobile(Resource):
                 cars.append(new_car)
                 return {"Message": "Auto created"}, 201
 
-    @jwt_required()
+    @jwt_required
     def put(self, mark):
         parser = reqparse.RequestParser()
         parser.add_argument('max_speed')
@@ -126,7 +112,7 @@ class Automobile(Resource):
                 return {"Message": "Auto updated"}, 202
         return {"Error": "Auto with that mark not found"}, 404
 
-    @jwt_required()
+    @jwt_required
     def delete(self, mark):
         for car in cars:
             if car['mark'] == mark:
@@ -136,7 +122,7 @@ class Automobile(Resource):
 
 
 class AllCars(Resource):
-    @jwt_required()
+    @jwt_required
     def get(self):
         if len(cars) > 0:
             return cars, 200
@@ -162,6 +148,7 @@ class Users(Resource):
 api.add_resource(Automobile, '/auto/<string:mark>')
 api.add_resource(Users, '/register')
 api.add_resource(AllCars, '/stock')
+api.add_resource(UserLogin, '/auth')
 
 
 if __name__ == '__main__':
