@@ -4,11 +4,13 @@ from flask_jwt_extended import JWTManager
 from flask_jwt_extended import create_access_token, jwt_required
 from flask_cors import CORS
 
+
 app = Flask(__name__)
+api = Api(app)
 app.config['JWT_SECRET_KEY'] = 'my_cool_secret'
 jwt = JWTManager(app)
 CORS(app)
-api = Api(app)
+
 
 users = [
     {
@@ -57,10 +59,12 @@ cars = [
 
 class UserLogin(Resource):
     def post(self):
-        username = request.get_json()['username']
-        password = request.get_json()['password']
+        parser = reqparse.RequestParser()
+        parser.add_argument('username')
+        parser.add_argument('password')
+        alien_user = parser.parse_args()
         for user in users:
-            if user['username'] == username and user['password'] == password:
+            if user['username'] == alien_user['username'] and user['password'] == alien_user['password']:
                 access_token = create_access_token(identity={
                     'role': 'admin',
                 }, expires_delta=False)
@@ -78,8 +82,9 @@ class Automobile(Resource):
         return {"Error": "Auto with that mark not found"}, 404
 
     @jwt_required
-    def post(self, mark):
+    def post(self, mark=''):
         parser = reqparse.RequestParser()
+        parser.add_argument('mark')
         parser.add_argument('max_speed')
         parser.add_argument('distance')
         parser.add_argument('handler')
@@ -96,8 +101,9 @@ class Automobile(Resource):
                 return {"Message": "Auto created"}, 201
 
     @jwt_required
-    def put(self, mark):
+    def put(self, mark=''):
         parser = reqparse.RequestParser()
+        parser.add_argument('mark')
         parser.add_argument('max_speed')
         parser.add_argument('distance')
         parser.add_argument('handler')
@@ -113,7 +119,7 @@ class Automobile(Resource):
         return {"Error": "Auto with that mark not found"}, 404
 
     @jwt_required
-    def delete(self, mark):
+    def delete(self, mark=''):
         for car in cars:
             if car['mark'] == mark:
                 cars.remove(car)
@@ -130,26 +136,27 @@ class AllCars(Resource):
             return {"Error": "No one autos found in DataBase"}, 400
 
 
-class Users(Resource):
+class UsersRegister(Resource):
     def post(self):
         parser = reqparse.RequestParser()
         parser.add_argument('username')
         parser.add_argument('password')
         last_id = users[-1]['id']
         new_user = parser.parse_args()
-        if new_user['username'] == users['username']:
-            return {"Error": "User already exists"}, 400
-        else:
-            new_user['id'] = last_id+1
-            users.append(new_user)
-            return {"Message" : "User created. Try to auth"}, 201
+        for user in users:
+            if new_user['username'] == user['username']:
+                return {"Error": "User already exists"}, 400
+            else:
+                new_user['id'] = last_id + 1
+                users.append(new_user)
+                return {"Message": "User created. Try to auth"}, 201
 
 
 api.add_resource(Automobile, '/auto/<string:mark>')
-api.add_resource(Users, '/register')
+api.add_resource(UsersRegister, '/register')
 api.add_resource(AllCars, '/stock')
 api.add_resource(UserLogin, '/auth')
 
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(debug=True, port=8000)
